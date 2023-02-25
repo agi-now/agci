@@ -173,6 +173,9 @@ class Interpreter:
         elif isinstance(node, sst.BinOp):
             return self._interpret_bin_op(graph, node)
 
+        elif isinstance(node, sst.Compare):
+            return self._interpret_bin_op(graph, node)
+
         elif isinstance(node, sst.Constant):
             return node.value, graph.out_one(node, 'next', optional=True)
 

@@ -6,7 +6,13 @@ from agci.sst import FunctionEntity, ast_to_sst
 
 CODE = """
 def main():
-    print(123)
+    print(factorial(7))
+    
+
+def factorial(x):
+    if x == 1:
+        return x
+    return x * factorial(x - 1)
 """
 
 
