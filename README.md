@@ -11,7 +11,7 @@ We need AST to be traversible in order to do pattern matching on it, traversabil
 
 ## Usage
 
-```
+```python
 from agci import Interpreter
 
 CODE = """
