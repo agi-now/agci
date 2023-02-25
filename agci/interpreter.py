@@ -1,8 +1,10 @@
+import ast
 import operator
 from dataclasses import dataclass
 from typing import Optional
 
 from agci import sst
+from agci.sst import ast_to_sst
 from agci.sst import Graph, FunctionEntity
 
 
@@ -234,3 +236,19 @@ class Interpreter:
         ctx = self.ctx.pop()
 
         return ctx.return_value
+
+    def load_code(self, code):
+        for ast_node in ast.parse(code).body:
+            func_def: ast.FunctionDef = ast_node
+            func = FunctionEntity(
+                name=func_def.name,
+                graph=ast_to_sst.Converter().convert(func_def),
+                params=[
+                    arg.arg for arg in func_def.args.args
+                ],
+            )
+            self.global_vars[func_def.name] = func
+
+    def run_main(self):
+        func = self.global_vars['main']
+        return self.interpret_function(func.graph, func.get_head(), {})

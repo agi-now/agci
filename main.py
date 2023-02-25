@@ -1,8 +1,4 @@
-import ast
-
 from agci.interpreter import Interpreter
-from agci.sst import FunctionEntity, ast_to_sst
-
 
 CODE = """
 def main():
@@ -19,26 +15,10 @@ def factorial(x):
 def main():
     inr = Interpreter({
         'print': print,
-        'list': list,
-        'set': set,
-        'len': len,
     })
 
-    functions = []
-    for ast_node in ast.parse(CODE).body:
-        func_def: ast.FunctionDef = ast_node
-        func = FunctionEntity(
-            name=func_def.name,
-            graph=ast_to_sst.Converter().convert(func_def),
-            params=[
-                arg.arg for arg in func_def.args.args
-            ],
-        )
-        functions.append(func)
-        inr.global_vars[func_def.name] = func
-
-    func = inr.global_vars['main']
-    inr.interpret_function(func.graph, func.get_head(), {})
+    inr.load_code(CODE)
+    inr.run_main()
 
 
 if __name__ == '__main__':
