@@ -27,7 +27,7 @@ def factorial(x):
 
 
 def main():
-    inr = Interpreter({
+    inr = Interpreter(global_vars={
         'print': print,
     })
 
