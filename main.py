@@ -1,4 +1,4 @@
-from agci.interpreter import Interpreter
+from agci import Interpreter
 
 CODE = """
 def main():
