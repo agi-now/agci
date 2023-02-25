@@ -50,5 +50,6 @@ traversible_graph = ast_to_sst.Converter().convert(ast_graph.body[0])
 
 # And convert back
 ast_graph = sst_to_ast.Converter().convert(traversible_graph)
+code = ast.unparse(ast_graph)
 
 ```
