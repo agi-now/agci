@@ -51,6 +51,8 @@ class Interpreter:
     def __init__(self, global_vars):
         self.global_vars = global_vars
         self.ctx = []
+        self.break_set = False
+        self.continue_set = False
 
     def _interpret_func_call(self, graph, node):
         func, _ = self.interpret_node(graph, graph.out_one(node, 'func'))
@@ -90,6 +92,8 @@ class Interpreter:
         return None, graph.out_one(node, 'next', optional=True)
 
     def _interpret_while(self, graph, node):
+        self.break_set = self.continue_set = False
+
         test_node = graph.out_one(node, 'test')
         true_head = graph.out_one(node, 'next', True)
         # else_head = graph.out_one(node, 'next', False, optional=True)
@@ -98,10 +102,18 @@ class Interpreter:
         while test:
             self.interpret_body(graph, true_head)
             test, _ = self.interpret_node(graph, test_node)
+            self.continue_set = False
+            if self.break_set:
+                self.break_set = False
+                break
+            if self.ctx[-1].return_value is not NO_RETURN_VALUE:
+                break
 
         return None, graph.out_one(node, 'next', optional=True)
 
     def _interpret_for(self, graph, node: sst.For):
+        self.break_set = self.continue_set = False
+
         iter_node = graph.out_one(node, 'iter')
         true_head = graph.out_one(node, 'next', True)
         # else_head = graph.out_one(node, 'next', False, optional=True)
@@ -110,6 +122,12 @@ class Interpreter:
         for val in iterator:
             self.ctx[-1].variables[node.target] = val
             self.interpret_body(graph, true_head)
+            self.continue_set = False
+            if self.break_set:
+                self.break_set = False
+                break
+            if self.ctx[-1].return_value is not NO_RETURN_VALUE:
+                break
 
         return None, graph.out_one(node, 'next', optional=True)
 
@@ -153,6 +171,36 @@ class Interpreter:
 
         return result, graph.out_one(node, 'next', optional=True)
 
+    def _interpret_bool_op(self, graph, node):
+        value_edges = graph.out_edges(node, 'values')
+        value_edges.sort(key=lambda x: x.param)
+        values = [
+            self.interpret_node(graph, edge.end)[0]
+            for edge in value_edges
+        ]
+        if node.op == 'And':
+            result = True
+            for value in values:
+                result = result and value
+        elif node.op == 'Or':
+            result = False
+            for value in values:
+                result = result or value
+        else:
+            raise ValueError(node.op)
+
+        return result, graph.out_one(node, 'next', optional=True)
+
+    def _interpret_unary_op(self, graph, node: sst.UnaryOp):
+        operand = self.interpret_node(graph, graph.out_one(node, 'operand'))[0]
+
+        if node.op == 'USub':
+            result = -operand
+        else:
+            raise ValueError(node.op)
+
+        return result, graph.out_one(node, 'next', optional=True)
+
     def interpret_node(self, graph: Graph, node):
         if isinstance(node, sst.FuncCall):
             return self._interpret_func_call(graph, node)
@@ -178,15 +226,33 @@ class Interpreter:
         elif isinstance(node, sst.Compare):
             return self._interpret_bin_op(graph, node)
 
+        elif isinstance(node, sst.BoolOp):
+            return self._interpret_bool_op(graph, node)
+
+        elif isinstance(node, sst.UnaryOp):
+            return self._interpret_unary_op(graph, node)
+
         elif isinstance(node, sst.Constant):
             return node.value, graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.List):
             value = []
-            for i in range(int(node.size)):
-                value.append(self.interpret_node(
-                    graph, graph.out_one(node, 'element', i))[0])
+            elements = graph.out_edges(node, 'elements')
+            for edge in elements:
+                value.append(self.interpret_node(graph, edge.end)[0])
             return value, graph.out_one(node, 'next', optional=True)
+
+        elif isinstance(node, sst.Dict):
+            result = {}
+            keys = graph.out_edges(node, 'keys')
+            values = graph.out_edges(node, 'values')
+            for key, value in zip(keys, values):
+                assert key.param == value.param
+
+                result[self.interpret_node(graph, key.end)[0]] =\
+                    self.interpret_node(graph, value.end)[0]
+
+            return result, graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.Variable):
             return self.ctx[-1].get(node.name), graph.out_one(node, 'next', optional=True)
@@ -204,10 +270,22 @@ class Interpreter:
             self.ctx[-1].return_value = self.interpret_node(graph, graph.out_one(node, 'value'))[0]
             return None, None
 
+        elif isinstance(node, sst.Break):
+            self.break_set = True
+            return None, None
+        
+        elif isinstance(node, sst.Continue):
+            self.continue_set = True
+            return None, None
+
         elif isinstance(node, sst.EndWhile):
+            self.continue_set = False
+            self.break_set = False
             return None, graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.EndFor):
+            self.continue_set = False
+            self.break_set = False
             return None, graph.out_one(node, 'next', optional=True)
 
         else:
@@ -220,6 +298,8 @@ class Interpreter:
         while head is not None:
             result, head = self.interpret_node(graph, head)
             if self.ctx[-1].return_value is not NO_RETURN_VALUE:
+                return
+            if self.continue_set or self.break_set:
                 return
 
         return result
@@ -235,6 +315,8 @@ class Interpreter:
         self.interpret_body(graph, head)
         ctx = self.ctx.pop()
 
+        if ctx.return_value is NO_RETURN_VALUE:
+            return None
         return ctx.return_value
 
     def load_code(self, code):

@@ -169,9 +169,31 @@ class Converter:
         return node
 
     def _convert_break(self, ast_node: ast.Break):
-        # TODO: keep "For" stack
         node = sst.Break()
         self.nodes.append(node)
+
+        self._last_nodes = [node, ]
+
+        return node
+
+    def _convert_continue(self, ast_node: ast.Continue):
+        node = sst.Continue()
+        self.nodes.append(node)
+
+        self._last_nodes = [node, ]
+
+        return node
+
+    def _convert_bool_op(self, ast_node: ast.BoolOp):
+        node = sst.BoolOp(op=type(ast_node.op).__name__)
+
+        self.nodes.append(node)
+
+        value_nodes = []
+        for i, value in enumerate(ast_node.values):
+            value_node = self._convert(value)
+            value_nodes.append(value_node)
+            self.edges.append(sst.Edge(node, value_node, 'values', i))
 
         self._last_nodes = [node, ]
 
@@ -382,38 +404,6 @@ class Converter:
         return sst.Graph(nodes=self.nodes, edges=self.edges)
 
 
-def main():
-    code = """
-    
-def test():
-    print(123)
-    g += a.b
-
-    
-def test():
-    abc = ctx.kb.load()
-    ctx.my = 23
-
-    for x in abc:
-        start, stop = x
-        if start[0] > stop:
-            break
-        else:
-            ctx.start += 1
-            print(stop)
-    
-    print('end')
-    """
-
-    func_def: ast.FunctionDef = ast.parse(code).body[0]
-
+def convert(ast_graph: ast.FunctionDef) -> sst.Graph:
     cnv = Converter()
-    graph = cnv.convert(func_def)
-
-    breakpoint()
-    pass
-
-
-if __name__ == '__main__':
-    main()
-
+    return cnv.convert(ast_graph)

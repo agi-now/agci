@@ -85,12 +85,14 @@ def test():
     run('test' + '9')
 """, """
 def test():
-    while test:
+    while test and True:
         run(test)
         for test in [1, 2, call(), {'': 1}]:
             run(test)
             ctx.test(8 + 9)
+            continue
         else:
+            break
             ctx.call[-1] = 2
             call(2)
         ctx.test(8 + 9)

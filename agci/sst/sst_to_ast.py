@@ -84,8 +84,22 @@ class Converter:
         ]
         return ast_node
 
+    def _convert_bool_op(self, graph: sst.Graph, sst_node: sst.BoolOp):
+        ast_node = ast.BoolOp(op=getattr(ast, sst_node.op)())
+        ast_node.values = []
+        values = graph.out_edges(sst_node, 'values')
+        values.sort(key=lambda x: x.param)
+        for edge in values:
+            ast_value = self._convert(graph, edge.end)
+            ast_node.values.append(ast_value)
+        return ast_node
+
     def _convert_break(self, graph: sst.Graph, sst_node: sst.Break):
         ast_node = ast.Break()
+        return ast_node
+
+    def _convert_continue(self, graph: sst.Graph, sst_node: sst.Continue):
+        ast_node = ast.Continue()
         return ast_node
 
     def _convert_dict(self, graph: sst.Graph, sst_node: sst.Dict):
@@ -239,3 +253,8 @@ class Converter:
         func_def = ast.FunctionDef(body=body, name='test', decorator_list=[], args=[])
 
         return ast.fix_missing_locations(func_def)
+
+
+def convert(sst_graph: sst.Graph) -> ast.FunctionDef:
+    cnv = Converter()
+    return cnv.convert(sst_graph)

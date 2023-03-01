@@ -46,10 +46,10 @@ from agci.sst import ast_to_sst
 from agci.sst import sst_to_ast
 
 ast_graph = ast.parse(CODE)
-traversable_graph = ast_to_sst.Converter().convert(ast_graph.body[0])
+traversable_graph = ast_to_sst.convert(ast_graph.body[0])
 
 # And convert back
-ast_graph = sst_to_ast.Converter().convert(traversable_graph)
+ast_graph = sst_to_ast.convert(traversable_graph)
 code = ast.unparse(ast_graph)
 
 ```

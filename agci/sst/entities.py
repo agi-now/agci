@@ -205,6 +205,18 @@ class Return(Node):
 @dataclass
 class Break(Node):
     node_id: str = field(default_factory=lambda: str(uuid.uuid4()), repr=False)
+    
+    
+@dataclass
+class Continue(Node):
+    node_id: str = field(default_factory=lambda: str(uuid.uuid4()), repr=False)
+
+
+@dataclass
+class BoolOp(Node):
+    op: str
+
+    node_id: str = field(default_factory=lambda: str(uuid.uuid4()), repr=False)
 
 
 @dataclass
