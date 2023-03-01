@@ -1,9 +1,5 @@
-import ast
-
 import pytest as pytest
 
-import agci.sst.ast_to_sst
-import agci.sst.sst_to_ast
 from agci import Interpreter
 
 

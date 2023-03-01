@@ -1,11 +1,10 @@
 import ast
 import operator
 from dataclasses import dataclass
-from typing import Optional
 
 from agci import sst
-from agci.sst import ast_to_sst
 from agci.sst import Graph, FunctionEntity
+from agci.sst import ast_to_sst
 
 
 class NoReturnValue:
