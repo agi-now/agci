@@ -134,7 +134,12 @@ class Converter:
 
     def _convert_return(self, graph: sst.Graph, sst_node: sst.Return):
         ast_node = ast.Return()
-        ast_node.value = self._convert(graph, graph.out_one(sst_node, 'value'))
+
+        value_node = graph.out_one(sst_node, 'value', optional=True)
+        if value_node is not None:
+            ast_node.value = self._convert(graph, value_node)
+        else:
+            ast_node.value = None
 
         return ast_node
 

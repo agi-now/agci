@@ -9,6 +9,9 @@ def main():
     return 1
 """, """
 def main():
+    return
+""", """
+def main():
     if 1 > 2:
         return 1
     else:

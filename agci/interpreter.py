@@ -266,7 +266,11 @@ class Interpreter:
             return value[_slice], graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.Return):
-            self.ctx[-1].return_value = self.interpret_node(graph, graph.out_one(node, 'value'))[0]
+            value_node = graph.out_one(node, 'value', optional=True)
+            if value_node is None:
+                self.ctx[-1].return_value = None
+            else:
+                self.ctx[-1].return_value = self.interpret_node(graph, value_node)[0]
             return None, None
 
         elif isinstance(node, sst.Break):

@@ -44,6 +44,8 @@ class Converter:
         if hasattr(self, method_name):
             node = getattr(self, method_name)(ast_node)
             return node
+        elif ast_node is None:
+            return self._convert_none()
         else:
             print(dir(ast_node))
             print(ast_node)
@@ -168,6 +170,11 @@ class Converter:
         self.nodes.append(node)
         return node
 
+    def _convert_none(self):
+        node = sst.Variable(name='None')
+        self.nodes.append(node)
+        return node
+
     def _convert_break(self, ast_node: ast.Break):
         node = sst.Break()
         self.nodes.append(node)
@@ -245,8 +252,9 @@ class Converter:
         node = sst.Return()
         self.nodes.append(node)
 
-        value_node = self._convert(ast_node.value)
-        self.edges.append(sst.Edge(node, value_node, 'value'))
+        if ast_node.value is not None:
+            value_node = self._convert(ast_node.value)
+            self.edges.append(sst.Edge(node, value_node, 'value'))
 
         return node
 

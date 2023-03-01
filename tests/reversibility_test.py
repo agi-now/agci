@@ -64,6 +64,19 @@ def test():
     if len([]) == 0:
         run('test')
         ctx.test(8 + 9)
+    elif a > b:
+        return 123
+    elif b > a:
+        for _ in range(c):
+            break
+    else:
+        return
+    run('test' + '9')
+""", """
+def test():
+    if len([]) == 0:
+        run('test')
+        ctx.test(8 + 9)
     else:
         ctx.call[-1] = 2
     run('test' + '9')
