@@ -55,6 +55,9 @@ def test():
     return '1' < '2'
 """, """
 def test():
+    return pow(**temp)
+""", """
+def test():
     if len([]) == 0:
         run('test')
         ctx.test(8 + 9)

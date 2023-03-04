@@ -4,12 +4,22 @@ from dataclasses import dataclass, field
 
 @dataclass
 class FunctionEntity:
+    interpreter: 'Interpreter'
     name: str
     graph: 'Graph'
     params: list
 
     def get_head(self):
         return self.graph.get_nodes()[0]
+
+    def __call__(self, *args, **kwargs):
+        kwargs = kwargs.copy()
+        unfilled_params = self.params.copy()
+        for key in kwargs:
+            unfilled_params.remove(key)
+        for key, arg in zip(unfilled_params, args):
+            kwargs[key] = arg
+        return self.interpreter.interpret_function(self.graph, self.get_head(), kwargs)
 
 
 class Node:
@@ -138,6 +148,11 @@ class Dict(Node):
 
 @dataclass
 class List(Node):
+    node_id: str = field(default_factory=lambda: str(uuid.uuid4()), repr=False)
+
+
+@dataclass
+class Tuple(Node):
     node_id: str = field(default_factory=lambda: str(uuid.uuid4()), repr=False)
 
 

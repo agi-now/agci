@@ -48,6 +48,7 @@ class InterpreterContext:
 
 class Interpreter:
     def __init__(self, global_vars):
+        global_vars['__agci'] = self
         self.global_vars = global_vars
         self.ctx = []
         self.break_set = False
@@ -61,21 +62,11 @@ class Interpreter:
             args.append(self.interpret_node(graph, arg_edge.end)[0])
 
         for kwarg_edge in graph.out_edges(node, 'kwargs'):
+            kwarg_value = self.interpret_node(graph, kwarg_edge.end)[0]
             if kwarg_edge.param is None:
-                raise ValueError('kwargs must be named')
-            kwargs[kwarg_edge.param] = self.interpret_node(graph, kwarg_edge.end)[0]
-
-        if isinstance(func, FunctionEntity):
-            params = {}
-            not_filled_params = func.params.copy()
-            for key in kwargs:
-                params[key] = kwargs[key]
-                not_filled_params.remove(key)
-            for i, arg in enumerate(args):
-                params[not_filled_params[i]] = arg
-
-            return self.interpret_function(func.graph, func.get_head(), params), \
-                graph.out_one(node, 'next', optional=True)
+                kwargs.update(kwarg_value)
+            else:
+                kwargs[kwarg_edge.param] = kwarg_value
 
         return func(*args, **kwargs), graph.out_one(node, 'next', optional=True)
 
@@ -134,8 +125,19 @@ class Interpreter:
         targets = graph.out(node, 'targets')
         value, _ = self.interpret_node(graph, graph.out_one(node, 'value'))
         for target in targets:
-            assert isinstance(target, sst.Variable)
-            self.ctx[-1].variables[target.name] = value
+            if isinstance(target, sst.Variable):
+                self.ctx[-1].variables[target.name] = value
+            elif isinstance(target, sst.GetItem):
+                target_value, _ = self.interpret_node(graph, graph.out_one(target, 'value'))
+                _slice, _ = self.interpret_node(graph, graph.out_one(target, 'slice'))
+                target_value[_slice] = value
+            elif isinstance(target, sst.GetAttr):
+                breakpoint()
+                target_value, _ = self.interpret_node(graph, graph.out_one(target, 'value'))
+                _slice, _ = self.interpret_node(graph, graph.out_one(target, 'slice'))
+                setattr(target_value, _slice, value)
+            else:
+                raise ValueError()
 
         return None, graph.out_one(node, 'next', optional=True)
 
@@ -195,6 +197,8 @@ class Interpreter:
 
         if node.op == 'USub':
             result = -operand
+        elif node.op == 'Not':
+            result = not operand
         else:
             raise ValueError(node.op)
 
@@ -241,6 +245,13 @@ class Interpreter:
                 value.append(self.interpret_node(graph, edge.end)[0])
             return value, graph.out_one(node, 'next', optional=True)
 
+        elif isinstance(node, sst.Tuple):
+            value = []
+            elements = graph.out_edges(node, 'elements')
+            for edge in elements:
+                value.append(self.interpret_node(graph, edge.end)[0])
+            return tuple(value), graph.out_one(node, 'next', optional=True)
+
         elif isinstance(node, sst.Dict):
             result = {}
             keys = graph.out_edges(node, 'keys')
@@ -263,7 +274,11 @@ class Interpreter:
         elif isinstance(node, sst.GetItem):
             value = self.interpret_node(graph, graph.out_one(node, 'value'))[0]
             _slice = self.interpret_node(graph, graph.out_one(node, 'slice'))[0]
-            return value[_slice], graph.out_one(node, 'next', optional=True)
+            try:
+                return value[_slice], graph.out_one(node, 'next', optional=True)
+            except IndexError:
+                breakpoint()
+                pass
 
         elif isinstance(node, sst.Return):
             value_node = graph.out_one(node, 'value', optional=True)
@@ -326,6 +341,7 @@ class Interpreter:
         for ast_node in ast.parse(code).body:
             func_def: ast.FunctionDef = ast_node
             func = FunctionEntity(
+                interpreter=self,
                 name=func_def.name,
                 graph=ast_to_sst.Converter().convert(func_def),
                 params=[
@@ -333,6 +349,10 @@ class Interpreter:
                 ],
             )
             self.global_vars[func_def.name] = func
+
+    def load_file(self, path: str):
+        with open(path) as f:
+            self.load_code(f.read())
 
     def run_main(self):
         func = self.global_vars['main']

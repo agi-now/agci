@@ -72,6 +72,12 @@ def main():
                 break
             total_sum += i * j
     return total_sum
+""", """
+def main():
+    abc = {}
+    abc['123'] = 1
+    abc[abc['123']] = 2
+    return abc
 """,
 ])
 def test_value(code):
