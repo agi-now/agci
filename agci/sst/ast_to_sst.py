@@ -113,6 +113,16 @@ class Converter:
 
         return node
 
+    def _convert_tuple(self, ast_node: ast.Tuple):
+        node = sst.Tuple()
+        self.nodes.append(node)
+
+        for i in range(len(ast_node.elts)):
+            elt_node = self._convert(ast_node.elts[i])
+            self.edges.append(sst.Edge(node, elt_node, 'elements', i))
+
+        return node
+
     def _convert_set(self, ast_node: ast.List):
         node = sst.Set()
         self.nodes.append(node)

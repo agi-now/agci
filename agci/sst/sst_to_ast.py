@@ -132,6 +132,18 @@ class Converter:
 
         return ast_node
 
+    def _convert_tuple(self, graph: sst.Graph, sst_node: sst.Tuple):
+        ast_node = ast.Tuple()
+        ast_node.elts = []
+
+        elements = graph.out_edges(sst_node, 'elements')
+        elements.sort(key=lambda x: x.param)
+
+        for element in elements:
+            ast_node.elts.append(self._convert(graph, element.end))
+
+        return ast_node
+
     def _convert_return(self, graph: sst.Graph, sst_node: sst.Return):
         ast_node = ast.Return()
 
