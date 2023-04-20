@@ -6,7 +6,7 @@ By traversable AST we mean AST where every node has "next" edge pointing to the 
 Branching nodes have separate "next" edges for True and False condition.  
 Regular python AST is not actually represented as graph, so we need to do this converions:  
     `Python -> Python AST -> Traversable AST.`  
-Traversible AST is then being interpreted by the interepter.  
+Traversible AST is then being interpreted.  
 We need AST to be traversable in order to do pattern matching on it, traversability is not a requirement for running the code.  
 
 ## Interpreter Usage
