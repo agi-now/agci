@@ -1,13 +1,12 @@
 # Agent Code Interpreter
 
 ## About
-Library to convert python code to traversable [AST](https://en.wikipedia.org/wiki/Abstract_syntax_tree) and back to code.  
-By traversable AST we mean AST where every node has "next" edge pointing to the next node to execute.  
-Branching nodes have separate "next" edges for True and False condition.  
-Regular python AST is not actually represented as graph, so we need to do this converions:  
-    `Python -> Python AST -> Traversable AST.`  
-Traversible AST is then being interpreted.  
-We need AST to be traversable in order to do pattern matching on it, traversability is not a requirement for running the code.  
+Library to convert python code to [Control Flow Graph](https://en.wikipedia.org/wiki/Control-flow_graph) and back to code.  
+
+The conversion is done with an intermediary step of converting to an [Abstract Syntax Tree](https://en.wikipedia.org/wiki/Abstract_syntax_tree):  
+    `Python -> AST -> CFG.`  
+CFG is then being interpreted.  
+We need CFG because we want to do pattern matching on the code while it's being executed.  
 
 ## Interpreter Usage
 
@@ -46,10 +45,10 @@ from agci.sst import ast_to_sst
 from agci.sst import sst_to_ast
 
 ast_graph = ast.parse(CODE)
-traversable_graph = ast_to_sst.convert(ast_graph.body[0])
+cfg_graph = ast_to_sst.convert(ast_graph.body[0])
 
 # And convert back
-ast_graph = sst_to_ast.convert(traversable_graph)
+ast_graph = sst_to_ast.convert(cfg_graph)
 code = ast.unparse(ast_graph)
 
 ```
