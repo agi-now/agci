@@ -41,8 +41,21 @@ if __name__ == '__main__':
 
 ## Conversion Usage
 ```python
+import ast
+
 from agci.sst import ast_to_sst
 from agci.sst import sst_to_ast
+
+CODE = """
+def main():
+    print(factorial(7))
+    
+
+def factorial(x):
+    if x == 1:
+        return x
+    return x * factorial(x - 1)
+"""
 
 ast_graph = ast.parse(CODE)
 cfg_graph = ast_to_sst.convert(ast_graph.body[0])
