@@ -24,19 +24,12 @@ def factorial(x):
     return x * factorial(x - 1)
 """
 
+inr = Interpreter(global_vars={
+    'print': print,
+})
 
-def main():
-    inr = Interpreter(global_vars={
-        'print': print,
-    })
-
-    inr.load_code(CODE)
-    inr.run_main()
-
-
-if __name__ == '__main__':
-    main()
-
+inr.load_code(CODE)
+inr.run_main()
 ```
 
 ## Conversion Usage
