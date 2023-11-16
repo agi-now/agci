@@ -1,6 +1,7 @@
 # Agent Code Interpreter
 
 ## About
+
 Library to convert python code to traversable [AST](https://en.wikipedia.org/wiki/Abstract_syntax_tree) and back to code.  
 By traversable AST we mean AST where every node has "next" edge pointing to the next node to execute.  
 Branching nodes have separate "next" edges for True and False condition.  
@@ -41,9 +42,22 @@ if __name__ == '__main__':
 ```
 
 ## Conversion Usage
+
 ```python
+import ast
 from agci.sst import ast_to_sst
 from agci.sst import sst_to_ast
+
+CODE = """
+def main():
+    print(factorial(7))
+    
+
+def factorial(x):
+    if x == 1:
+        return x
+    return x * factorial(x - 1)
+"""
 
 ast_graph = ast.parse(CODE)
 traversable_graph = ast_to_sst.convert(ast_graph.body[0])
@@ -51,5 +65,4 @@ traversable_graph = ast_to_sst.convert(ast_graph.body[0])
 # And convert back
 ast_graph = sst_to_ast.convert(traversable_graph)
 code = ast.unparse(ast_graph)
-
 ```
