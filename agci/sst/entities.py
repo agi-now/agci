@@ -1,3 +1,4 @@
+import random
 import uuid
 from dataclasses import dataclass, field
 
@@ -16,7 +17,8 @@ class FunctionEntity:
         kwargs = kwargs.copy()
         unfilled_params = self.params.copy()
         for key in kwargs:
-            unfilled_params.remove(key)
+            if key in unfilled_params:
+                unfilled_params.remove(key)
         for key, arg in zip(unfilled_params, args):
             kwargs[key] = arg
         return self.interpreter.interpret_function(self.graph, self.get_head(), kwargs)
@@ -164,6 +166,7 @@ class Set(Node):
 @dataclass
 class FuncCall(Node):
     node_id: str = field(default_factory=lambda: str(uuid.uuid4()), repr=False)
+    node_id: int = field(default_factory=lambda: random.randint(0, 100), repr=True)
 
 
 @dataclass
@@ -237,4 +240,9 @@ class BoolOp(Node):
 @dataclass
 class SelfAssign(Node):
     op: str
+    node_id: str = field(default_factory=lambda: str(uuid.uuid4()), repr=False)
+
+
+@dataclass
+class Raise(Node):
     node_id: str = field(default_factory=lambda: str(uuid.uuid4()), repr=False)

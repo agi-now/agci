@@ -2,9 +2,9 @@ import ast
 import operator
 from dataclasses import dataclass
 
-from agci import sst
-from agci.sst import Graph, FunctionEntity
-from agci.sst import ast_to_sst
+from . import sst
+from .sst import Graph, FunctionEntity
+from .sst import ast_to_sst
 
 
 class NoReturnValue:
@@ -25,6 +25,7 @@ BIN_OP_MAP = {
     '==': operator.eq,
     '!=': operator.ne,
     'in': operator.contains,
+    'not in': lambda x, y: x not in y,
     'is': operator.is_,
     'is not': operator.is_not,
     '**': operator.pow,
@@ -47,7 +48,7 @@ class InterpreterContext:
 
 
 class Interpreter:
-    def __init__(self, global_vars):
+    def __init__(self, global_vars: dict[str, any]):
         global_vars['__agci'] = self
         self.global_vars = global_vars
         self.ctx = []
@@ -132,10 +133,8 @@ class Interpreter:
                 _slice, _ = self.interpret_node(graph, graph.out_one(target, 'slice'))
                 target_value[_slice] = value
             elif isinstance(target, sst.GetAttr):
-                breakpoint()
                 target_value, _ = self.interpret_node(graph, graph.out_one(target, 'value'))
-                _slice, _ = self.interpret_node(graph, graph.out_one(target, 'slice'))
-                setattr(target_value, _slice, value)
+                setattr(target_value, target.name, value)
             else:
                 raise ValueError()
 
@@ -306,6 +305,10 @@ class Interpreter:
             self.break_set = False
             return None, graph.out_one(node, 'next', optional=True)
 
+        elif isinstance(node, sst.Raise):
+            exc = self.interpret_node(graph, graph.out_one(node, 'exc'))[0]
+            raise exc
+
         else:
             raise ValueError(node)
 
@@ -354,6 +357,9 @@ class Interpreter:
         with open(path) as f:
             self.load_code(f.read())
 
+    def run_function(self, name, kwargs=None):
+        func = self.global_vars[name]
+        return self.interpret_function(func.graph, func.get_head(), kwargs or {})
+
     def run_main(self):
-        func = self.global_vars['main']
-        return self.interpret_function(func.graph, func.get_head(), {})
+        self.run_function('main')

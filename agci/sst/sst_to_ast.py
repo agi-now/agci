@@ -246,6 +246,13 @@ class Converter:
     def _convert_constant(self, graph: sst.Graph, sst_node: sst.Constant):
         return ast.Constant(value=sst_node.value)
 
+    def _convert_raise(self, graph: sst.Graph, sst_node: sst.Raise):
+        ast_node = ast.Raise()
+        ast_node.exc = self._convert(graph, graph.out_one(sst_node, 'exc'))
+        # cause is not supported
+        # ast_node.cause = self._convert(graph, graph.out_one(sst_node, 'cause', True))
+        return ast_node
+
     def _convert_body(self, graph, first_node):
         body = []
 

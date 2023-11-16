@@ -17,6 +17,7 @@ BIN_OP_MAP = {
     ast.Mult: '*',
     ast.Div: '/',
     ast.In: 'in',
+    ast.NotIn: 'not in',
     ast.Is: 'is',
     ast.IsNot: 'is not',
     ast.Pow: '**',
@@ -100,6 +101,19 @@ class Converter:
 
         self.edges.append(sst.Edge(node, node_value, 'value'))
         self.edges.append(sst.Edge(node, node_slice, 'slice'))
+
+        return node
+
+    def _convert_raise(self, ast_node: ast.Raise):
+        node = sst.Raise()
+        self.nodes.append(node)
+
+        if ast_node.exc:
+            exc_node = self._convert(ast_node.exc)
+            self.edges.append(sst.Edge(node, exc_node, 'exc'))
+
+        if ast_node.cause is not None:
+            raise SyntaxError("Raise.cause is not supported")
 
         return node
 
