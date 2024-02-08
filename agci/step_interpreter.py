@@ -172,42 +172,52 @@ class StepInterpreter:
     def interpret_node(self, graph: Graph, node):
         if isinstance(node, sst.FuncCall):
             val = yield from self._interpret_func_call(graph, node)
+            yield
             return val
 
         elif isinstance(node, sst.If):
             val = yield from self._interpret_if(graph, node)
+            yield
             return val
 
         elif isinstance(node, sst.While):
             val = yield from self._interpret_while(graph, node)
+            yield
             return val
 
         elif isinstance(node, sst.For):
             val = yield from self._interpret_for(graph, node)
+            yield
             return val
 
         elif isinstance(node, sst.Assign):
             val = yield from self._interpret_assign(graph, node)
+            yield
             return val
 
         elif isinstance(node, sst.SelfAssign):
             val = yield from self._interpret_self_assign(graph, node)
+            yield
             return val
 
         elif isinstance(node, sst.BinOp):
             val = yield from self._interpret_bin_op(graph, node)
+            yield
             return val
 
         elif isinstance(node, sst.Compare):
             val = yield from self._interpret_bin_op(graph, node)
+            yield
             return val
 
         elif isinstance(node, sst.BoolOp):
             val = yield from self._interpret_bool_op(graph, node)
+            yield
             return val
 
         elif isinstance(node, sst.UnaryOp):
             val = yield from self._interpret_unary_op(graph, node)
+            yield
             return val
 
         elif isinstance(node, sst.Constant):
@@ -219,6 +229,7 @@ class StepInterpreter:
             for edge in elements:
                 node_value, _ = yield from self.interpret_node(graph, edge.end)
                 value.append(node_value)
+            yield
             return value, graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.Tuple):
@@ -227,6 +238,7 @@ class StepInterpreter:
             for edge in elements:
                 node_value, _ = yield from self.interpret_node(graph, edge.end)
                 value.append(node_value)
+            yield
             return tuple(value), graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.Dict):
@@ -241,6 +253,7 @@ class StepInterpreter:
 
                 result[node_key] = node_value
 
+            yield
             return result, graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.Variable):
@@ -248,11 +261,14 @@ class StepInterpreter:
 
         elif isinstance(node, sst.GetAttr):
             value, _ = yield from self.interpret_node(graph, graph.out_one(node, 'value'))
+            yield
             return getattr(value, node.name), graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.GetItem):
             value, _ = yield from self.interpret_node(graph, graph.out_one(node, 'value'))
             _slice, _ = yield from self.interpret_node(graph, graph.out_one(node, 'slice'))
+            yield
+            
             try:
                 return value[_slice], graph.out_one(node, 'next', optional=True)
             except IndexError:
@@ -265,6 +281,8 @@ class StepInterpreter:
                 self.ctx[-1].return_value = None
             else:
                 self.ctx[-1].return_value, _ = yield from self.interpret_node(graph, value_node)
+            
+            yield
             
             return None, None
 
