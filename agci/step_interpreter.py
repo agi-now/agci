@@ -1,53 +1,17 @@
 import ast
-import operator
-from dataclasses import dataclass
+
+from agci.interpreter import (
+    BIN_OP_MAP, 
+    NO_RETURN_VALUE, 
+    InterpreterContext,
+)
 
 from . import sst
 from .sst import Graph, FunctionEntity
 from .sst import ast_to_sst
 
 
-class NoReturnValue:
-    pass
-
-
-NO_RETURN_VALUE = NoReturnValue()
-
-BIN_OP_MAP = {
-    '+': operator.add,
-    '-': operator.sub,
-    '*': operator.mul,
-    '/': operator.truediv,
-    '>': operator.gt,
-    '>=': operator.ge,
-    '<': operator.lt,
-    '<=': operator.le,
-    '==': operator.eq,
-    '!=': operator.ne,
-    'in': operator.contains,
-    'not in': lambda x, y: x not in y,
-    'is': operator.is_,
-    'is not': operator.is_not,
-    '**': operator.pow,
-    '&': operator.and_,
-    '|': operator.or_,
-    '^': operator.xor,
-}
-
-
-@dataclass
-class InterpreterContext:
-    variables: dict[str, any]
-    return_value = NO_RETURN_VALUE
-
-    def get(self, name):
-        try:
-            return self.variables[name]
-        except KeyError as e:
-            raise KeyError(f'Variable "{name}" not found!') from e
-
-
-class Interpreter:
+class StepInterpreter:
     def __init__(self, global_vars: dict[str, any]):
         global_vars['__agci'] = self
         self.global_vars = global_vars
@@ -56,30 +20,32 @@ class Interpreter:
         self.continue_set = False
 
     def _interpret_func_call(self, graph, node):
-        func, _ = self.interpret_node(graph, graph.out_one(node, 'func'))
+        func, _ = yield from self.interpret_node(graph, graph.out_one(node, 'func'))
         args = []
         kwargs = {}
+        
         for arg_edge in graph.out_edges(node, 'args'):
-            args.append(self.interpret_node(graph, arg_edge.end)[0])
+            arg_value, _ = yield from self.interpret_node(graph, arg_edge.end)
+            args.append(arg_value)
 
         for kwarg_edge in graph.out_edges(node, 'kwargs'):
-            kwarg_value = self.interpret_node(graph, kwarg_edge.end)[0]
+            kwarg_value, _ = yield from self.interpret_node(graph, kwarg_edge.end)
             if kwarg_edge.param is None:
                 kwargs.update(kwarg_value)
             else:
                 kwargs[kwarg_edge.param] = kwarg_value
-
+                
         return func(*args, **kwargs), graph.out_one(node, 'next', optional=True)
 
     def _interpret_if(self, graph, node):
         test_node = graph.out_one(node, 'test')
         true_head = graph.out_one(node, 'next', True)
         false_head = graph.out_one(node, 'next', False, optional=True)
-        test, _ = self.interpret_node(graph, test_node)
+        test, _ = yield from self.interpret_node(graph, test_node)
         if test:
-            self.interpret_body(graph, true_head)
+            yield from self.interpret_body(graph, true_head)
         elif false_head is not None:
-            self.interpret_body(graph, false_head)
+            yield from self.interpret_body(graph, false_head)
         return None, graph.out_one(node, 'next', optional=True)
 
     def _interpret_while(self, graph, node):
@@ -88,11 +54,11 @@ class Interpreter:
         test_node = graph.out_one(node, 'test')
         true_head = graph.out_one(node, 'next', True)
         # else_head = graph.out_one(node, 'next', False, optional=True)
-        test, _ = self.interpret_node(graph, test_node)
+        test, _ = yield from self.interpret_node(graph, test_node)
 
         while test:
-            self.interpret_body(graph, true_head)
-            test, _ = self.interpret_node(graph, test_node)
+            yield from self.interpret_body(graph, true_head)
+            test, _ = yield from self.interpret_node(graph, test_node)
             self.continue_set = False
             if self.break_set:
                 self.break_set = False
@@ -108,11 +74,11 @@ class Interpreter:
         iter_node = graph.out_one(node, 'iter')
         true_head = graph.out_one(node, 'next', True)
         # else_head = graph.out_one(node, 'next', False, optional=True)
-        iterator, _ = self.interpret_node(graph, iter_node)
+        iterator, _ = yield from self.interpret_node(graph, iter_node)
 
         for val in iterator:
             self.ctx[-1].variables[node.target] = val
-            self.interpret_body(graph, true_head)
+            yield from self.interpret_body(graph, true_head)
             self.continue_set = False
             if self.break_set:
                 self.break_set = False
@@ -124,16 +90,16 @@ class Interpreter:
 
     def _interpret_assign(self, graph, node):
         targets = graph.out(node, 'targets')
-        value, _ = self.interpret_node(graph, graph.out_one(node, 'value'))
+        value, _ = yield from self.interpret_node(graph, graph.out_one(node, 'value'))
         for target in targets:
             if isinstance(target, sst.Variable):
                 self.ctx[-1].variables[target.name] = value
             elif isinstance(target, sst.GetItem):
-                target_value, _ = self.interpret_node(graph, graph.out_one(target, 'value'))
-                _slice, _ = self.interpret_node(graph, graph.out_one(target, 'slice'))
+                target_value, _ = yield from self.interpret_node(graph, graph.out_one(target, 'value'))
+                _slice, _ = yield from self.interpret_node(graph, graph.out_one(target, 'slice'))
                 target_value[_slice] = value
             elif isinstance(target, sst.GetAttr):
-                target_value, _ = self.interpret_node(graph, graph.out_one(target, 'value'))
+                target_value, _ = yield from self.interpret_node(graph, graph.out_one(target, 'value'))
                 setattr(target_value, target.name, value)
             else:
                 raise ValueError()
@@ -141,7 +107,7 @@ class Interpreter:
         return None, graph.out_one(node, 'next', optional=True)
 
     def _interpret_self_assign(self, graph, node):
-        value, _ = self.interpret_node(graph, graph.out_one(node, 'value'))
+        value, _ = yield from self.interpret_node(graph, graph.out_one(node, 'value'))
         target = graph.out_one(node, 'target')
         assert isinstance(target, sst.Variable)
         if node.op == '+':
@@ -158,10 +124,9 @@ class Interpreter:
         return None, graph.out_one(node, 'next', optional=True)
 
     def _interpret_bin_op(self, graph, node):
-        left, right = (
-            self.interpret_node(graph, graph.out_one(node, 'left'))[0],
-            self.interpret_node(graph, graph.out_one(node, 'right'))[0],
-        )
+        left, _ = yield from self.interpret_node(graph, graph.out_one(node, 'left'))
+        right, _ = yield from self.interpret_node(graph, graph.out_one(node, 'right'))
+
         if node.op == 'in':
             left, right = right, left
 
@@ -174,10 +139,11 @@ class Interpreter:
     def _interpret_bool_op(self, graph, node):
         value_edges = graph.out_edges(node, 'values')
         value_edges.sort(key=lambda x: x.param)
-        values = [
-            self.interpret_node(graph, edge.end)[0]
-            for edge in value_edges
-        ]
+        values = []
+        for edge in value_edges:
+            val, _ = yield from self.interpret_node(graph, edge.end)
+            values.append(val)
+        
         if node.op == 'And':
             result = True
             for value in values:
@@ -192,7 +158,7 @@ class Interpreter:
         return result, graph.out_one(node, 'next', optional=True)
 
     def _interpret_unary_op(self, graph, node: sst.UnaryOp):
-        operand = self.interpret_node(graph, graph.out_one(node, 'operand'))[0]
+        operand, _ = yield from self.interpret_node(graph, graph.out_one(node, 'operand'))
 
         if node.op == 'USub':
             result = -operand
@@ -205,34 +171,44 @@ class Interpreter:
 
     def interpret_node(self, graph: Graph, node):
         if isinstance(node, sst.FuncCall):
-            return self._interpret_func_call(graph, node)
+            val = yield from self._interpret_func_call(graph, node)
+            return val
 
         elif isinstance(node, sst.If):
-            return self._interpret_if(graph, node)
+            val = yield from self._interpret_if(graph, node)
+            return val
 
         elif isinstance(node, sst.While):
-            return self._interpret_while(graph, node)
+            val = yield from self._interpret_while(graph, node)
+            return val
 
         elif isinstance(node, sst.For):
-            return self._interpret_for(graph, node)
+            val = yield from self._interpret_for(graph, node)
+            return val
 
         elif isinstance(node, sst.Assign):
-            return self._interpret_assign(graph, node)
+            val = yield from self._interpret_assign(graph, node)
+            return val
 
         elif isinstance(node, sst.SelfAssign):
-            return self._interpret_self_assign(graph, node)
+            val = yield from self._interpret_self_assign(graph, node)
+            return val
 
         elif isinstance(node, sst.BinOp):
-            return self._interpret_bin_op(graph, node)
+            val = yield from self._interpret_bin_op(graph, node)
+            return val
 
         elif isinstance(node, sst.Compare):
-            return self._interpret_bin_op(graph, node)
+            val = yield from self._interpret_bin_op(graph, node)
+            return val
 
         elif isinstance(node, sst.BoolOp):
-            return self._interpret_bool_op(graph, node)
+            val = yield from self._interpret_bool_op(graph, node)
+            return val
 
         elif isinstance(node, sst.UnaryOp):
-            return self._interpret_unary_op(graph, node)
+            val = yield from self._interpret_unary_op(graph, node)
+            return val
 
         elif isinstance(node, sst.Constant):
             return node.value, graph.out_one(node, 'next', optional=True)
@@ -241,14 +217,16 @@ class Interpreter:
             value = []
             elements = graph.out_edges(node, 'elements')
             for edge in elements:
-                value.append(self.interpret_node(graph, edge.end)[0])
+                node_value, _ = yield from self.interpret_node(graph, edge.end)
+                value.append(node_value)
             return value, graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.Tuple):
             value = []
             elements = graph.out_edges(node, 'elements')
             for edge in elements:
-                value.append(self.interpret_node(graph, edge.end)[0])
+                node_value, _ = yield from self.interpret_node(graph, edge.end)
+                value.append(node_value)
             return tuple(value), graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.Dict):
@@ -257,9 +235,11 @@ class Interpreter:
             values = graph.out_edges(node, 'values')
             for key, value in zip(keys, values):
                 assert key.param == value.param
+                
+                node_key, _ = yield from self.interpret_node(graph, key.end)
+                node_value, _ = yield from self.interpret_node(graph, value.end)
 
-                result[self.interpret_node(graph, key.end)[0]] =\
-                    self.interpret_node(graph, value.end)[0]
+                result[node_key] = node_value
 
             return result, graph.out_one(node, 'next', optional=True)
 
@@ -267,12 +247,12 @@ class Interpreter:
             return self.ctx[-1].get(node.name), graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.GetAttr):
-            value = self.interpret_node(graph, graph.out_one(node, 'value'))[0]
+            value, _ = yield from self.interpret_node(graph, graph.out_one(node, 'value'))
             return getattr(value, node.name), graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.GetItem):
-            value = self.interpret_node(graph, graph.out_one(node, 'value'))[0]
-            _slice = self.interpret_node(graph, graph.out_one(node, 'slice'))[0]
+            value, _ = yield from self.interpret_node(graph, graph.out_one(node, 'value'))
+            _slice, _ = yield from self.interpret_node(graph, graph.out_one(node, 'slice'))
             try:
                 return value[_slice], graph.out_one(node, 'next', optional=True)
             except IndexError:
@@ -284,7 +264,8 @@ class Interpreter:
             if value_node is None:
                 self.ctx[-1].return_value = None
             else:
-                self.ctx[-1].return_value = self.interpret_node(graph, value_node)[0]
+                self.ctx[-1].return_value, _ = yield from self.interpret_node(graph, value_node)
+            
             return None, None
 
         elif isinstance(node, sst.Break):
@@ -306,7 +287,7 @@ class Interpreter:
             return None, graph.out_one(node, 'next', optional=True)
 
         elif isinstance(node, sst.Raise):
-            exc = self.interpret_node(graph, graph.out_one(node, 'exc'))[0]
+            exc, _ = yield from self.interpret_node(graph, graph.out_one(node, 'exc'))
             raise exc
 
         else:
@@ -317,7 +298,7 @@ class Interpreter:
         result = None
 
         while head is not None:
-            result, head = self.interpret_node(graph, head)
+            result, head = yield from self.interpret_node(graph, head)
             if self.ctx[-1].return_value is not NO_RETURN_VALUE:
                 return
             if self.continue_set or self.break_set:
@@ -333,7 +314,7 @@ class Interpreter:
                 **kwargs.copy(),
             }
         ))
-        self.interpret_body(graph, head)
+        yield from self.interpret_body(graph, head)
         ctx = self.ctx.pop()
 
         if ctx.return_value is NO_RETURN_VALUE:
