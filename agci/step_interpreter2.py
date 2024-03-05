@@ -5,40 +5,10 @@ from agci.interpreter import (
     NO_RETURN_VALUE, 
     InterpreterContext,
 )
-from agci.sst.entities import FunctionDispatchOption
 
 from . import sst
 from .sst import Graph, FunctionEntity
 from .sst import ast_to_sst
-
-
-def _convert_ast_node_to_concept(ast_node):
-    if ast_node is None:
-        return None
-    
-    if isinstance(ast_node, ast.Name):
-        return ast_node.id
-    
-    if isinstance(ast_node, ast.Call):
-        name = ast_node.func.id
-        assert ast_node.args == []
-        fields = {
-            kw.arg: _convert_ast_node_to_concept(kw.value)
-            for kw in ast_node.keywords
-        }
-        
-        cid = [name, ]
-
-        if fields:
-            cid.append('{')
-            for key, value in sorted(fields.items(), key=lambda x: x[0]):
-                cid.append(f'{key}={value},')
-            cid[-1] = cid[-1][:-1]
-            cid.append('}')
-
-        return ''.join(cid)
-    
-    raise NotImplementedError(ast_node)
 
 
 class StepInterpreter:
@@ -69,10 +39,9 @@ class StepInterpreter:
             # can't be interpreted with __call__ because it needs to be merged with the current graph
             # and then yielded from
             
-            func_graph, new_kwargs = func.resolve_dispatch(args, kwargs)
-            graph.merge(func_graph, node, edge='func_code')
+            graph.merge(func.graph, node, edge='func_code')
             
-            value = yield from func(**new_kwargs)
+            value = yield from func(*args, **kwargs)
             
             return value, graph.out_one(node, 'next', optional=True)
 
@@ -372,27 +341,15 @@ class StepInterpreter:
     def load_code(self, code):
         for ast_node in ast.parse(code).body:
             func_def: ast.FunctionDef = ast_node
-            graph = ast_to_sst.Converter().convert(func_def)
-            args = [
-                (
-                    arg.arg, 
-                    _convert_ast_node_to_concept(arg.annotation),
-                ) for arg in ast_node.args.args
-            ]
-            
-            fdo = FunctionDispatchOption(
-                args=args,
-                graph=graph,
+            func = FunctionEntity(
+                interpreter=self,
+                name=func_def.name,
+                graph=ast_to_sst.Converter().convert(func_def),
+                params=[
+                    arg.arg for arg in func_def.args.args
+                ],
             )
-            if func_def.name in self.global_vars:
-                self.global_vars[func_def.name].dispatch_options.append(fdo)
-            else:
-                func = FunctionEntity(
-                    interpreter=self,
-                    name=func_def.name,
-                    dispatch_options=[fdo]
-                )
-                self.global_vars[func_def.name] = func
+            self.global_vars[func_def.name] = func
 
     def load_file(self, path: str):
         with open(path) as f:
@@ -400,11 +357,7 @@ class StepInterpreter:
 
     def run_function(self, name, kwargs=None):
         func = self.global_vars[name]
-        graph, new_kwargs = func.resolve_dispatch(kwargs or {})
-        return self.interpret_function(graph, graph.nodes[0], new_kwargs)
+        return self.interpret_function(func.graph, func.get_head(), kwargs or {})
 
     def run_main(self):
         return self.run_function('main')
-    
-    def dispatch_check_param_types(self, param_type, arg_value):
-        return True, arg_value

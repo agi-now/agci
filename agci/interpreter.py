@@ -359,7 +359,8 @@ class Interpreter:
 
     def run_function(self, name, kwargs=None):
         func = self.global_vars[name]
-        return self.interpret_function(func.graph, func.get_head(), kwargs or {})
+        graph = func.resolve_dispatch([], kwargs or {})
+        return self.interpret_function(graph, graph.nodes[0], kwargs or {})
 
     def run_main(self):
         return self.run_function('main')

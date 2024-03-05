@@ -52,6 +52,14 @@ class Converter:
             print(ast_node)
             breakpoint()
             pass
+        
+    def _convert_pass(self, ast_node: ast.Pass):
+        node = sst.Pass()
+        self.nodes.append(node)
+
+        self._last_nodes = [node, ]
+
+        return node
 
     def _convert_call(self, ast_node: ast.Call):
         node = sst.FuncCall()
@@ -334,7 +342,7 @@ class Converter:
 
     def _convert_for(self, ast_node: ast.For):
         if not isinstance(ast_node.target, ast.Name):
-            raise ValueError("Only single variables allowed")
+            raise ValueError("Only single variables allowed as a for loop target")
 
         start_node = sst.For(target=ast_node.target.id)
         self.nodes.append(start_node)
@@ -356,7 +364,10 @@ class Converter:
                 self.edges.append(sst.Edge(last_node, sub_node, 'next'))
 
             nodes_body.append(sub_node)
-
+        
+        # for last_node in self._last_nodes:
+        #     self.edges.append(sst.Edge(last_node, start_node, 'next'))
+        
         self._loop_stack.pop()
 
         nodes_else = []
@@ -401,7 +412,10 @@ class Converter:
                 self.edges.append(sst.Edge(last_node, sub_node, 'next'))
 
             nodes_body.append(sub_node)
-
+        
+        # for last_node in self._last_nodes:
+        #     self.edges.append(sst.Edge(last_node, start_node, 'next'))
+            
         self._loop_stack.pop()
 
         nodes_else = []

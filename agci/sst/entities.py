@@ -1,27 +1,54 @@
-import random
 import uuid
+import random
+
+from typing import Optional, Self
 from dataclasses import dataclass, field
+
+
+@dataclass
+class FunctionDispatchOption:
+    args: list[tuple[str, Optional[str]]]
+    graph: 'Graph'
 
 
 @dataclass
 class FunctionEntity:
     interpreter: 'Interpreter'
     name: str
-    graph: 'Graph'
-    params: list
+    dispatch_options: list[FunctionDispatchOption]
 
-    def get_head(self):
-        return self.graph.get_nodes()[0]
+    def resolve_dispatch(self, args, kwargs):
+        for opt in self.dispatch_options:
+            resulting_kwargs = {}
+            args_copy = list(args).copy()
+            matches = True
+            
+            for param_name, param_type in opt.args:
+                if param_name in kwargs:
+                    arg_value = kwargs[param_name]
+                else:
+                    arg_value = args_copy.pop(0)
+                if param_type is None:
+                    continue
+                
+                arg_ok, new_arg_value = self.interpreter.dispatch_check_param_types(
+                    param_type,
+                    arg_value,
+                )
+                
+                if not arg_ok:
+                    matches = False
+                    break
+                
+                resulting_kwargs[param_name] = new_arg_value
+                
+            if matches:
+                return opt.graph, resulting_kwargs
+        raise ValueError(f"No matching dispatch option found for '{self.name}'")
 
     def __call__(self, *args, **kwargs):
-        kwargs = kwargs.copy()
-        unfilled_params = self.params.copy()
-        for key in kwargs:
-            if key in unfilled_params:
-                unfilled_params.remove(key)
-        for key, arg in zip(unfilled_params, args):
-            kwargs[key] = arg
-        return self.interpreter.interpret_function(self.graph, self.get_head(), kwargs)
+        graph, new_kwargs = self.resolve_dispatch(args, kwargs)
+        return self.interpreter.interpret_function(graph, graph.get_nodes()[0], new_kwargs)
 
 
 class Node:
@@ -43,6 +70,8 @@ class Graph:
         self._edges: list[Edge] = []
         self._nodes_by_id = {}
         self._edges_by_id = {}
+        self.active_node_id = nodes[0].node_id if nodes else None
+        self._unclosed_graph_heads = []
 
         for node in nodes:
             self.add_node(node)
@@ -105,7 +134,20 @@ class Graph:
                 results.append(edge)
 
         return results
-
+    
+    def _find_where_to_merge(self, head: Node):
+        if self.out_one(head, 'next', True, optional=True) is None:
+            return head
+        breakpoint()
+        pass
+    
+    def merge(self, graph: Self, head: Node, edge="next"):
+        graph_head = graph.get_nodes()[0]
+        
+        self._nodes.extend(graph.get_nodes())
+        self._edges.extend(graph.get_edges())
+        self._edges.append(Edge(head, graph_head, edge))
+        
 
 @dataclass
 class Assign(Node):
@@ -245,4 +287,9 @@ class SelfAssign(Node):
 
 @dataclass
 class Raise(Node):
+    node_id: str = field(default_factory=lambda: str(uuid.uuid4()), repr=False)
+    
+    
+@dataclass
+class Pass(Node):
     node_id: str = field(default_factory=lambda: str(uuid.uuid4()), repr=False)

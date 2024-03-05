@@ -20,7 +20,7 @@ def to_html(nodes: list[Node], edges: list[Edge], head_id=None):
         G.add_edge(edge.start.node_id, edge.end.node_id, label=edge.edge_id)
         
     # Create a PyVis network
-    net = Network(notebook=True, height="100vh", width="100vw", bgcolor="#222222", font_color="white")
+    net = Network(directed=True, notebook=True, height="100vh", width="100vw", bgcolor="#222222", font_color="white", cdn_resources='in_line')
     net.from_nx(G)
 
     for node in net.nodes:
@@ -52,7 +52,7 @@ def to_html(nodes: list[Node], edges: list[Edge], head_id=None):
           "springLength": 50,
           "springConstant": 0.04,
           "damping": 0.09,
-          "avoidOverlap": 0
+          "avoidOverlap": 1
         }
       }
     }
