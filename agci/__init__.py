@@ -1,3 +1,2 @@
-from agci.interpreter import Interpreter
-from agci.step_interpreter import StepInterpreter
-from agci.step_interpreter import StepInterpreter 
+from agci.step_interpreter import StepInterpreter as Interpreter
+from agci.true_step_interpreter import TrueStepInterpreter 

@@ -12,6 +12,13 @@ from .sst import Graph, FunctionEntity
 from .sst import ast_to_sst
 
 
+def _args_hash_func(args):
+    return '-'.join([
+        f'{name}={concept}'
+        for name, concept in args
+    ])
+
+
 def _convert_ast_node_to_concept(ast_node):
     if ast_node is None:
         return None
@@ -48,6 +55,8 @@ class StepInterpreter:
         self.ctx = []
         self.break_set = False
         self.continue_set = False
+        self.combined_graph = Graph([], [])
+        self.func_defs = []
 
     def _interpret_func_call(self, graph, node):
         func, _ = yield from self.interpret_node(graph, graph.out_one(node, 'func'))
@@ -70,7 +79,7 @@ class StepInterpreter:
             # and then yielded from
             
             func_graph, new_kwargs = func.resolve_dispatch(args, kwargs)
-            graph.merge(func_graph, node, edge='func_code')
+            # graph.merge(func_graph, node, edge='func_code')
             
             value = yield from func(**new_kwargs)
             
@@ -152,15 +161,27 @@ class StepInterpreter:
     def _interpret_self_assign(self, graph, node):
         value, _ = yield from self.interpret_node(graph, graph.out_one(node, 'value'))
         target = graph.out_one(node, 'target')
-        assert isinstance(target, sst.Variable)
+        
+        if isinstance(target, sst.Variable):
+            target_upper = self.ctx[-1].variables
+            field = target.name
+        elif isinstance(target, sst.GetItem):
+            target_upper, _ = yield from self.interpret_node(graph, graph.out_one(target, 'value'))
+            field, _ = yield from self.interpret_node(graph, graph.out_one(target, 'slice'))
+        elif isinstance(target, sst.GetAttr):
+            target_upper, _ = yield from self.interpret_node(graph, graph.out_one(node, 'value'))
+            field = node.name
+        else:
+            raise NotImplementedError()
+        
         if node.op == '+':
-            self.ctx[-1].variables[target.name] += value
+            target_upper[field] += value
         elif node.op == '-':
-            self.ctx[-1].variables[target.name] -= value
+            target_upper[field] -= value
         elif node.op == '*':
-            self.ctx[-1].variables[target.name] *= value
+            target_upper[field] *= value
         elif node.op == '/':
-            self.ctx[-1].variables[target.name] /= value
+            target_upper[field] /= value
         else:
             raise ValueError(node.op)
 
@@ -384,6 +405,14 @@ class StepInterpreter:
                 args=args,
                 graph=graph,
             )
+            
+            # args_hash = _args_hash_func(args)
+            # func_id = f"{func_def.name}--{args_hash}"
+            
+            # graph_head = graph.get_nodes()[0]
+            # self.combined_graph.merge(graph, graph_head, edge=None)
+            # self.combined_graph.function_heads[func_id] = graph_head
+                                    
             if func_def.name in self.global_vars:
                 self.global_vars[func_def.name].dispatch_options.append(fdo)
             else:
@@ -393,15 +422,16 @@ class StepInterpreter:
                     dispatch_options=[fdo]
                 )
                 self.global_vars[func_def.name] = func
-
+                self.func_defs.append(func)
+            
     def load_file(self, path: str):
         with open(path) as f:
             self.load_code(f.read())
 
-    def run_function(self, name, kwargs=None):
+    def run_function(self, name, args=None, kwargs=None):
         func = self.global_vars[name]
-        graph, new_kwargs = func.resolve_dispatch(kwargs or {})
-        return self.interpret_function(graph, graph.nodes[0], new_kwargs)
+        graph, new_kwargs = func.resolve_dispatch(args or [], kwargs or {})
+        return self.interpret_function(graph, graph.get_nodes()[0], new_kwargs)
 
     def run_main(self):
         return self.run_function('main')

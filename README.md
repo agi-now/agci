@@ -30,7 +30,7 @@ inr = Interpreter(global_vars={
 })
 
 inr.load_code(CODE)
-inr.run_main()
+list(inr.run_main())
 ```
 
 ## Conversion Usage
