@@ -1,15 +1,51 @@
 import ast
+import operator
+from dataclasses import dataclass
 
-from agci.interpreter import (
-    BIN_OP_MAP, 
-    NO_RETURN_VALUE, 
-    InterpreterContext,
-)
 from agci.sst.entities import FunctionDispatchOption
 
 from . import sst
 from .sst import Graph, FunctionEntity
 from .sst import ast_to_sst
+
+
+class NoReturnValue:
+    pass
+
+
+NO_RETURN_VALUE = NoReturnValue()
+
+BIN_OP_MAP = {
+    '+': operator.add,
+    '-': operator.sub,
+    '*': operator.mul,
+    '/': operator.truediv,
+    '>': operator.gt,
+    '>=': operator.ge,
+    '<': operator.lt,
+    '<=': operator.le,
+    '==': operator.eq,
+    '!=': operator.ne,
+    'in': operator.contains,
+    'is': operator.is_,
+    'is not': operator.is_not,
+    '**': operator.pow,
+    '&': operator.and_,
+    '|': operator.or_,
+    '^': operator.xor,
+}
+
+
+@dataclass
+class InterpreterContext:
+    variables: dict[str, any]
+    return_value = NO_RETURN_VALUE
+
+    def get(self, name):
+        try:
+            return self.variables[name]
+        except KeyError as e:
+            raise KeyError(f'Variable "{name}" not found!') from e
 
 
 def _args_hash_func(args):
@@ -48,7 +84,7 @@ def _convert_ast_node_to_concept(ast_node):
     raise NotImplementedError(ast_node)
 
 
-class YieldaInterpreter:
+class YieldInterpreter:
     def __init__(self, global_vars: dict[str, any]):
         global_vars['__agci'] = self
         self.global_vars = global_vars
