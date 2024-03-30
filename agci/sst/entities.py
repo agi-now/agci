@@ -1,5 +1,4 @@
 import uuid
-import random
 
 from typing import Optional, Self
 from dataclasses import dataclass, field
@@ -18,9 +17,9 @@ class FunctionDispatchOption:
 
 @dataclass
 class FunctionEntity:
-    interpreter: 'Interpreter'
     name: str
     dispatch_options: list[FunctionDispatchOption]
+    interpreter: 'Interpreter' = None
     
     def _collect_args_no_dispatch(self, args, kwargs):
         opt = self.dispatch_options[0]
