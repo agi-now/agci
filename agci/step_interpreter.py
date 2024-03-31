@@ -236,6 +236,10 @@ class StepInterpreter:
                 self.global_vars[attr] = state['value']
             
             return graph.out_one(node, 'next', optional=True), None, NO_VALUE
+        
+    def load_file(self, path: str):
+        with open(path) as f:
+            self.load_code(f.read())
     
     def load_code(self, code: str):
         for func_def in ast.parse(code).body:
