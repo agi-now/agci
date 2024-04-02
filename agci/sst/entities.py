@@ -36,7 +36,6 @@ class FunctionEntity:
             
         return result
             
-
     def resolve_dispatch(self, args, kwargs):
         for opt in self.dispatch_options:
             for _, param_type in opt.args:
