@@ -37,6 +37,7 @@ BIN_OP_MAP = {
     '&': operator.and_,
     '|': operator.or_,
     '^': operator.xor,
+    '%': operator.mod,
 }
 
 
