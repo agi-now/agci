@@ -142,7 +142,7 @@ class StepInterpreter:
         self.global_vars = global_vars
         self.frame_stack = []
         
-        self.func_defs = {}
+        self.func_defs: dict[str, FunctionEntity] = {}
         
     def step(self):
         if not self.frame_stack:
@@ -207,6 +207,9 @@ class StepInterpreter:
             args_nodes = [args_nodes_dict[idx] for idx in sorted(args_nodes_dict.keys())]
             kwargs_nodes = graph.out_dict(node, 'kwargs')
             
+            if func_node.name == 'range':
+                breakpoint()
+            
             params = {
                 'func': func_node,
                 'args': args_nodes,
@@ -233,11 +236,55 @@ class StepInterpreter:
                     'result_frame_id': frame.id,
                 }, NO_VALUE
             
+            if func is range:
+                breakpoint()
             result = func(*params['args'], **params['kwargs'])
             
             _next = graph.out_one(node, 'next', optional=True)
             
             return _next, None, result
+        
+    def _interpret_dict(self, graph: Graph, node: sst.Dict, state):
+        if state is None:
+            keys = [
+                edge.end for edge in sorted(
+                    graph.out_edges(node, 'keys'),
+                    key=lambda x: x.param
+                )
+            ]
+            values = [
+                edge.end for edge in sorted(
+                    graph.out_edges(node, 'values'),
+                    key=lambda x: x.param
+                )
+            ]
+            return None, {
+                "keys": keys,
+                "values": values,
+            }, NO_VALUE
+        else:
+            _next = graph.out_one(node, 'next', optional=True)
+            keys = state['keys']
+            values = state['values']
+            return _next, None, {
+                key: value
+                for key, value in zip(keys, values)
+            }
+            
+    def _interpret_list(self, graph: Graph, node: sst.List, state):
+        if state is None:
+            values = [
+                edge.end for edge in sorted(
+                    graph.out_edges(node, 'values'),
+                    key=lambda x: x.param
+                )
+            ]
+            return None, {
+                "values": values,
+            }, NO_VALUE
+        else:
+            _next = graph.out_one(node, 'next', optional=True)
+            return _next, None, state['values']
         
     def _interpret_return(self, graph: Graph, node: sst.Return, state):
         if state is None:
@@ -251,7 +298,11 @@ class StepInterpreter:
         try:
             value = self.frame_stack[-1].context[-1].variables[node.name]
         except (KeyError, IndexError):
-            value = self.global_vars[node.name]
+            try:
+                value = self.global_vars[node.name]
+            except KeyError:
+                breakpoint()
+                pass
             
         return None, None, value
     
@@ -264,6 +315,17 @@ class StepInterpreter:
             return value, {'value': value}, NO_VALUE
         else:
             return None, None, getattr(state['value'], node.name)
+    
+    def _interpret_get_item(self, graph: Graph, node: sst.GetItem, state):
+        if state is None:
+            value = graph.out_one(node, 'value')
+            key = graph.out_one(node, 'slice')
+            return None, {
+                'value': value,
+                'slice': key,
+            }, NO_VALUE
+        else:
+            return None, None, state['value'][state['slice']]
     
     def _interpret_if(self, graph: Graph, node: sst.If, state):
         if state is None:
@@ -278,9 +340,76 @@ class StepInterpreter:
             if state['test']:
                 return graph.out_one(node, 'next', True), None, NO_VALUE
             else:
-                return graph.out_one(node, 'next', False), None, NO_VALUE
+                return graph.out_one(node, 'next', False, optional=True), None, NO_VALUE
         else:
             return graph.out_one(node, 'next', optional=True), None, NO_VALUE
+        
+    def _interpret_for(self, graph: Graph, node: sst.If, state):
+        if state is None or state['iter'] is None:
+            test = graph.out_one(node, 'iter')
+            return None, {
+                'iter': test,
+            }, NO_VALUE
+        else:
+            # make iter an iterator if it's not
+            if not hasattr(state['iter'], '__next__'):
+                state['iter'] = iter(state['iter'])
+                        
+            try:
+                value = next(state['iter'])
+                self.frame_stack[-1].context[-1].variables[node.target] = value
+                self.frame_stack[-1].back_node_stack.append((node, state))
+            except StopIteration:
+                return graph.out_one(node, 'next', optional=True), None, NO_VALUE
+                
+            return graph.out_one(node, 'next', True), None, NO_VALUE
+    
+    def _interpret_end_for(self, graph: Graph, node: sst.EndFor, state):
+        return graph.out_one(node, 'next', optional=True), None, NO_VALUE
+    
+    def _interpret_while(self, graph: Graph, node: sst.While, state):
+        if state is None or state['test'] is None:
+            test = graph.out_one(node, 'test')
+            return None, {
+                'test': test,
+            }, NO_VALUE
+        else:
+            if state['test']:
+                state['test'] = None
+                self.frame_stack[-1].back_node_stack.append((node, state))
+                return graph.out_one(node, 'next', True), None, NO_VALUE
+            else:
+                return graph.out_one(node, 'next', optional=True), None, NO_VALUE
+    
+    def _interpret_end_while(self, graph: Graph, node: sst.EndWhile, state):
+        return graph.out_one(node, 'next', optional=True), None, NO_VALUE
+    
+    def _interpret_compare(self, graph: Graph, node: sst.Compare, state):
+        if state is None:
+            left = graph.out_one(node, 'left')
+            right = graph.out_one(node, 'right')
+            op = node.op
+            return None, {
+                'left': left,
+                'right': right,
+                'op': op,
+            }, NO_VALUE
+        else:
+            return None, None, BIN_OP_MAP[state['op']](state['left'], state['right'])
+    
+    def _interpret_bin_op(self, graph: Graph, node: sst.BinOp, state):
+        if state is None:
+            left = graph.out_one(node, 'left')
+            right = graph.out_one(node, 'right')
+            op = node.op
+            
+            return None, {
+                'left': left,
+                'right': right,
+                'op': op,
+            }, NO_VALUE
+        else:
+            return None, None, BIN_OP_MAP[state['op']](state['left'], state['right'])
     
     def _interpret_assign(self, graph: Graph, node: sst.Assign, state):
         if state is None:
@@ -289,27 +418,47 @@ class StepInterpreter:
             
             if isinstance(target, Variable):
                 target, attr = None, target.name
+                _type = 'var'
+            elif isinstance(target, GetAttr):
+                target = graph.out_one(target, 'value')
+                attr = target.name
+                _type = 'attr'
+            elif isinstance(target, sst.GetItem):
+                attr = graph.out_one(target, 'slice')
+                target = graph.out_one(target, 'value')
+                _type = 'item'
+            else:
+                raise NotImplementedError(target)
 
             return None, {
                 'target': target,
                 'attr': attr,
                 'value': value,
+                'type': _type,
             }, NO_VALUE
         else:
             target = state['target']
             attr = state['attr']
             
-            if target is None:
-                self.global_vars[attr] = state['value']
+            match state['type']:
+                case 'var':
+                    self.global_vars[attr] = state['value']
+                case 'attr':
+                    setattr(target, attr, state['value'])
+                case 'item':
+                    target[attr] = state['value']
             
             return graph.out_one(node, 'next', optional=True), None, NO_VALUE
         
     def run(self):
+        idx = 0
         while True:
+            idx += 1
             try:
                 self.step()
             except StopIteration:
                 break
+        print(f'Finished in {idx} steps')
         
     def load_file(self, path: str):
         with open(path) as f:
@@ -338,36 +487,21 @@ class StepInterpreter:
             self.func_defs[func_def.name].interpreter = self
         
     def trigger_function(self, name, *args, **kwargs):
-        resulting_kwargs = {}
-        
-        disp_opt = self.func_defs[name].dispatch_options[0]
-        
-        for arg_name, arg_concept in disp_opt.args:
-            if args:
-                if arg_name in kwargs:
-                    raise ValueError(f'Argument "{arg_name}" is provided twice!')
-                resulting_kwargs[arg_name] = args.pop(0)
-            elif arg_name in kwargs:
-                resulting_kwargs[arg_name] = kwargs.pop(arg_name)
-                
-        if kwargs:
-            raise ValueError(f'Unknown arguments: {", ".join(kwargs.keys())}')
-        
-        if args:
-            raise ValueError(f'Too many arguments: {", ".join(args)}')
-        
-        if len(resulting_kwargs) != len(disp_opt.args):
-            raise ValueError('Not enough arguments!')
+        graph, new_kwargs = self.func_defs[name].resolve_dispatch(args, kwargs)
         
         frame = ExecutionFrame(
-            head=disp_opt.graph.get_nodes()[0],
-            graph=disp_opt.graph,
-            context=[InterpreterContext(variables=resulting_kwargs)],
+            head=graph.get_nodes()[0],
+            graph=graph,
+            context=[InterpreterContext(variables=new_kwargs)],
         )
         self.frame_stack.append(frame)
+        
+    def run_main(self):
+        self.trigger_function('main')
+        self.run()
 
     def dispatch_check_param_types(self, param_type, arg_value):
-        return True, arg_value
+        raise NotImplementedError(param_type, arg_value)
     
     def add_context(self, variables):
         self.frame_stack[-1].context.append(InterpreterContext(variables=variables))

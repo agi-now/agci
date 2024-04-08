@@ -16,6 +16,7 @@ BIN_OP_MAP = {
     ast.Sub: '-',
     ast.Mult: '*',
     ast.Div: '/',
+    ast.Mod: '%',
     ast.In: 'in',
     ast.NotIn: 'not in',
     ast.Is: 'is',
@@ -301,7 +302,7 @@ class Converter:
             self.edges.append(sst.Edge(node, value_node, 'values', i))
 
         return node
-
+    
     def _convert_if(self, ast_node: ast.If):
         node = sst.If()
         self.nodes.append(node)

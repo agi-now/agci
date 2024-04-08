@@ -36,7 +36,7 @@ class FunctionEntity:
             
         return result
             
-    def resolve_dispatch(self, args, kwargs):
+    def resolve_dispatch(self, args, kwargs) -> tuple['Graph', dict]:
         for opt in self.dispatch_options:
             for _, param_type in opt.args:
                 if param_type is None:
@@ -44,7 +44,7 @@ class FunctionEntity:
                     resulting_kwargs = self._collect_args_no_dispatch(args, kwargs)
                     return opt.graph, resulting_kwargs
         
-        for opt in self.dispatch_options:
+        for opt in self.dispatch_options:            
             resulting_kwargs = {}
             args_copy = list(args).copy()
             matches = True
@@ -54,7 +54,7 @@ class FunctionEntity:
                     arg_value = kwargs[param_name]
                 else:
                     if not args_copy:
-                        raise ValueError(f"No arguments left: {self.name}")
+                        raise ValueError(f"Not enough arguments: {self.name}")
                     arg_value = args_copy.pop(0)
                 if param_type is None:
                     continue
@@ -72,6 +72,7 @@ class FunctionEntity:
                 
             if matches:
                 return opt.graph, resulting_kwargs
+        
         raise ValueError(f"No matching dispatch option found for '{self.name}'")
 
     def __call__(self, *args, **kwargs):
